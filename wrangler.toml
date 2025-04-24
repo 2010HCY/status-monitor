@@ -1,13 +1,15 @@
 name = "status-monitor"
+account_id = "57e18b4fb317b217ebf8b0f74415ab9e"
+workers_dev = true
 compatibility_date = "2025-04-24"
-main = "src/worker.js"
+main = "worker.js"
 
 kv_namespaces = [
   { binding = "STATUS", id = "438c9cba5244441f985428d77bab172d" } 
 ]
 
 [vars]
-KEY = " " # 你的刷新KEY
+KEY = "123456" #你的刷新KEY
 
 [triggers]
 crons = ["*/30 * * * *"]
