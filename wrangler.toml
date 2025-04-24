@@ -1,6 +1,4 @@
 name = "status-monitor"
-account_id = "57e18b4fb317b217ebf8b0f74415ab9e"
-workers_dev = true
 compatibility_date = "2025-04-24"
 main = "worker.js"
 
@@ -9,7 +7,7 @@ kv_namespaces = [
 ]
 
 [vars]
-KEY = "" # 你的刷新KEY
+KEY = " " # 你的刷新KEY
 
 [triggers]
 crons = ["*/30 * * * *"]
