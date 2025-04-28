@@ -2,6 +2,12 @@ addEventListener('fetch', event => {
     event.respondWith(handleRequest(event.request));
 });
 
+function logEvent(type, info = {}) {
+    const time = new Date().toISOString();
+    const logObj = { time, type, ...info };
+    console.log(JSON.stringify(logObj));
+}
+
 const GITHUB_URL = 'https://github.com/2010HCY'; // GitHub按钮链接
 const BLOG_URL = 'https://100713.xyz'; // 博客链接
 const MONITOR_NAME = '站点监测'; // 你要叫什么名字，随便填
@@ -21,11 +27,34 @@ const SITES = [ // 自行修改增加要监测的站点
 async function handleRequest(request, env, ctx) {
     const { pathname, searchParams } = new URL(request.url);
 
+    if (pathname === '/' || pathname === '/index.html') {
+        const ip = request.headers.get("CF-Connecting-IP") || request.headers.get("x-forwarded-for") || "";
+        const ua = request.headers.get('user-agent') || "";
+        const referer = request.headers.get("referer") || "";
+        logEvent("access", { ip, ua, referer, url: request.url });
+    }
+
+    if (pathname === "/api/logs") {
+        const logsRaw = await env.LOGS.get("logs");
+        return new Response(logsRaw || '[]', {
+            headers: { 'Content-Type': 'application/json' }
+        });
+    }
+
     if (pathname === "/api/refresh") {
+        const ip = request.headers.get("CF-Connecting-IP") || request.headers.get("x-forwarded-for") || "";
+        const ua = request.headers.get('user-agent') || "";
+        logEvent("manual-refresh", {
+            ip,
+            ua,
+            url: request.url,
+            key: searchParams.get('key') || ""
+        });
+    
         if (searchParams.get('key') !== env.KEY) {
             return new Response('Forbidden', { status: 403 });
         }
-        await refreshAllSiteStatus(env.STATUS);
+        await refreshAllSiteStatus(env.STATUS, false);
         return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } });
     }
 
@@ -337,7 +366,7 @@ a {
         width: 100%;
     }
      .status-bar {
-         flex: 1; /* 填满 */
+         flex: 1;
     }
     .percentage-display {
         position: static;
@@ -366,13 +395,14 @@ const fetchWithTimeout = async (url, options, timeout = 5000) => {
     }
 };
 
-async function refreshAllSiteStatus(STATUS) {
+async function refreshAllSiteStatus(STATUS, env = null, isAuto = false) {
     let now = new Date();
     let updateTime = now.toISOString();
     await Promise.all(
         SITES.map(async (site) => {
             const key = `status:${site.url}`;
             let history = [];
+            let logDetail = { site: site.url, siteName: site.name };
             try {
                 const response = await fetchWithTimeout(site.url, { method: 'HEAD', headers: { 'User-Agent': 'Cloudflare-Worker' } }, 5000);
                 const isUp = response.status === 200;
@@ -381,13 +411,26 @@ async function refreshAllSiteStatus(STATUS) {
                 history.push(isUp ? 1 : 0);
                 if (history.length > 50) history = history.slice(-50);
                 await STATUS.put(key, JSON.stringify(history));
+
+                Object.assign(logDetail, {
+                    isUp,
+                    status: response.status,
+                    auto: isAuto,
+                    reason: isUp ? "" : `Status code: ${response.status}`
+                });
             } catch (error) {
                 let historyString = await STATUS.get(key);
                 history = historyString ? JSON.parse(historyString) : [];
                 if (history.length > 50) history = history.slice(-50);
                 history.push(0);
                 await STATUS.put(key, JSON.stringify(history));
+                Object.assign(logDetail, {
+                    isUp: false,
+                    auto: isAuto,
+                    reason: error.message || error.toString()
+                });
             }
+            logEvent(isAuto ? "auto-refresh-site" : "manual-refresh-site", logDetail);
         })
     );
     await STATUS.put("updateTime", updateTime);
