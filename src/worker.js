@@ -44,6 +44,7 @@ async function handleRequest(request, env, ctx) {
     if (pathname === "/api/refresh") {
         const ip = request.headers.get("CF-Connecting-IP") || request.headers.get("x-forwarded-for") || "";
         const ua = request.headers.get('user-agent') || "";
+        console.log("使用API令牌刷新");
         logEvent("manual-refresh", {
             ip,
             ua,
@@ -91,7 +92,7 @@ async function handleRequest(request, env, ctx) {
 </body>
 </html>`;
         return new Response(htmlContent, {
-            headers: { 'Content-Type': 'text/html' },
+            headers: { 'Content-Type': 'text/html' , 'Cache-Control': 'public, max-age=1800' },
         });
     }
 
@@ -198,7 +199,7 @@ fetchStatus(); // 首次加载
 setInterval(updateCountdown, 1000);
 `;
         return new Response(scriptContent, {
-            headers: { 'Content-Type': 'application/javascript' },
+            headers: { 'Content-Type': 'application/javascript' , 'Cache-Control': 'public, max-age=86400' },
         });
     }
 
@@ -375,14 +376,14 @@ a {
     }
 }`;
         return new Response(styleContent, {
-            headers: { 'Content-Type': 'text/css' },
+            headers: { 'Content-Type': 'text/css' ,'Cache-Control': 'public, max-age=86400' },
         });
     }
 
     return new Response('Not Found', { status: 404 });
 }
 
-const fetchWithTimeout = async (url, options, timeout = 5000) => {
+const fetchWithTimeout = async (url, options, timeout = 10000) => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
     try {
@@ -395,7 +396,7 @@ const fetchWithTimeout = async (url, options, timeout = 5000) => {
     }
 };
 
-async function refreshAllSiteStatus(STATUS, env = null, isAuto = false) {
+async function refreshAllSiteStatus(STATUS, isAuto = false) {
     let now = new Date();
     let updateTime = now.toISOString();
     await Promise.all(
@@ -403,34 +404,31 @@ async function refreshAllSiteStatus(STATUS, env = null, isAuto = false) {
             const key = `status:${site.url}`;
             let history = [];
             let logDetail = { site: site.url, siteName: site.name };
+            let status;
+            let isUp = false;
+            let reason = '';
             try {
-                const response = await fetchWithTimeout(site.url, { method: 'HEAD', headers: { 'User-Agent': 'Cloudflare-Worker' } }, 5000);
-                const isUp = response.status === 200;
+                const response = await fetchWithTimeout(site.url, { method: 'GET', headers: { 'User-Agent': 'Cloudflare-Worker' } }, 10000);
+                status = response.status;
+                isUp = status === 200;
                 let historyString = await STATUS.get(key);
                 history = historyString ? JSON.parse(historyString) : [];
                 history.push(isUp ? 1 : 0);
                 if (history.length > 50) history = history.slice(-50);
                 await STATUS.put(key, JSON.stringify(history));
-
-                Object.assign(logDetail, {
-                    isUp,
-                    status: response.status,
-                    auto: isAuto,
-                    reason: isUp ? "" : `Status code: ${response.status}`
-                });
+                reason = isUp ? '' : `Status code: ${status}`;
             } catch (error) {
                 let historyString = await STATUS.get(key);
                 history = historyString ? JSON.parse(historyString) : [];
                 if (history.length > 50) history = history.slice(-50);
                 history.push(0);
                 await STATUS.put(key, JSON.stringify(history));
-                Object.assign(logDetail, {
-                    isUp: false,
-                    auto: isAuto,
-                    reason: error.message || error.toString()
-                });
+                status = '-';
+                reason = error.message || error.toString();
             }
-            logEvent(isAuto ? "auto-refresh-site" : "manual-refresh-site", logDetail);
+
+            let msg = `${site.name} 状态：${status}${isUp ? ' 正常' : ' 异常'}${reason ? '，原因：' + reason : ''}`;
+            console.log(msg);
         })
     );
     await STATUS.put("updateTime", updateTime);
