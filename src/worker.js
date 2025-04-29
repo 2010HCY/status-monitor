@@ -444,7 +444,16 @@ export default {
     }
 }
 
+let statusCache = { data: null, time: 0 };
+const STATUS_CACHE_TTL = 29 * 60 * 1000;
+
 async function getStatus(env) {
+    const now = Date.now();
+    if (statusCache.data && (now - statusCache.time < STATUS_CACHE_TTL)) {
+        console.log("状态缓存命中");
+        return new Response(statusCache.data, { headers: { 'Content-Type': 'application/json' } });
+    }
+    console.log("状态缓存未命中");
     const updateTime = await env.STATUS.get("updateTime");
     const statusData = await Promise.all(
         SITES.map(async (site) => {
@@ -455,6 +464,10 @@ async function getStatus(env) {
             return { url: site.url, name: site.name, isUp: isUp, history: history };
         })
     );
+    const out = JSON.stringify({ updateTime, sites: statusData });
+
+    statusCache.data = out;
+    statusCache.time = now;
     return new Response(JSON.stringify({ updateTime, sites: statusData }), {
         headers: { 'Content-Type': 'application/json' },
     });
