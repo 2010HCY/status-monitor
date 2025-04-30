@@ -399,39 +399,48 @@ const fetchWithTimeout = async (url, options, timeout = 10000) => {
 async function refreshAllSiteStatus(STATUS, isAuto = false) {
     let now = new Date();
     let updateTime = now.toISOString();
+    let batchSites = [];
+    
     await Promise.all(
         SITES.map(async (site) => {
-            const key = `status:${site.url}`;
-            let history = [];
-            let logDetail = { site: site.url, siteName: site.name };
-            let status;
-            let isUp = false;
-            let reason = '';
+            let status, isUp = false, reason = '';
             try {
                 const response = await fetchWithTimeout(site.url, { method: 'GET', headers: { 'User-Agent': 'Cloudflare-Worker' } }, 10000);
                 status = response.status;
                 isUp = status === 200;
-                let historyString = await STATUS.get(key);
-                history = historyString ? JSON.parse(historyString) : [];
-                history.push(isUp ? 1 : 0);
-                if (history.length > 50) history = history.slice(-50);
-                await STATUS.put(key, JSON.stringify(history));
                 reason = isUp ? '' : `Status code: ${status}`;
             } catch (error) {
-                let historyString = await STATUS.get(key);
-                history = historyString ? JSON.parse(historyString) : [];
-                if (history.length > 50) history = history.slice(-50);
-                history.push(0);
-                await STATUS.put(key, JSON.stringify(history));
                 status = '-';
                 reason = error.message || error.toString();
             }
+            batchSites.push({
+                url: site.url,
+                name: site.name,
+                status,
+                isUp,
+                reason
+            });
 
             let msg = `${site.name} 状态：${status}${isUp ? ' 正常' : ' 异常'}${reason ? '，原因：' + reason : ''}`;
             console.log(msg);
         })
     );
-    await STATUS.put("updateTime", updateTime);
+
+    let oldRaw = await STATUS.get('status');
+    let fullData = oldRaw ? JSON.parse(oldRaw) : { updateTime: '', sites: [] };
+
+    batchSites.forEach(st => {
+        let oldSite = fullData.sites.find(o => o.url === st.url);
+        let history = oldSite && oldSite.history ? [...oldSite.history] : [];
+        history.push(st.isUp ? 1 : 0);
+        if (history.length > 50) history = history.slice(-50);
+        st.history = history;
+    });
+
+    fullData.updateTime = updateTime;
+    fullData.sites = batchSites;
+
+    await STATUS.put('status', JSON.stringify(fullData));
 }
 
 export default {
@@ -454,21 +463,12 @@ async function getStatus(env) {
         return new Response(statusCache.data, { headers: { 'Content-Type': 'application/json' } });
     }
     console.log("状态缓存未命中");
-    const updateTime = await env.STATUS.get("updateTime");
-    const statusData = await Promise.all(
-        SITES.map(async (site) => {
-            const key = `status:${site.url}`;
-            let historyString = await env.STATUS.get(key);
-            let history = historyString ? JSON.parse(historyString) : [];
-            const isUp = history.length > 0 ? !!history[history.length-1] : false;
-            return { url: site.url, name: site.name, isUp: isUp, history: history };
-        })
-    );
-    const out = JSON.stringify({ updateTime, sites: statusData });
-
-    statusCache.data = out;
-    statusCache.time = now;
-    return new Response(JSON.stringify({ updateTime, sites: statusData }), {
-        headers: { 'Content-Type': 'application/json' },
-    });
+    const raw = await env.STATUS.get('status');
+    if (raw && raw !== '{"updateTime":"无数据","sites":[]}') {
+        statusCache.data = raw;
+        statusCache.time = now;
+        return new Response(raw, { headers: { 'Content-Type': 'application/json' } });
+    } else {
+        return new Response('{"updateTime":"无数据","sites":[]}', { headers: { 'Content-Type': 'application/json' } });
+    }
 }
