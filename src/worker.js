@@ -32,6 +32,19 @@ async function handleRequest(request, env, ctx) {
         const ua = request.headers.get('user-agent') || "";
         const referer = request.headers.get("referer") || "";
         logEvent("access", { ip, ua, referer, url: request.url });
+        
+        const ifNoneMatch = request.headers.get('If-None-Match');
+        const etag = `"${MONITOR_NAME}-v1"`;
+        
+        if (ifNoneMatch === etag) {
+            return new Response(null, {
+                status: 304,
+                headers: {
+                    'ETag': etag,
+                    'Cache-Control': 'public, max-age=1800',
+                }
+            });
+        }
     }
 
     if (pathname === "/api/logs") {
@@ -198,10 +211,14 @@ function updateCountdown() {
 fetchStatus(); // 首次加载
 setInterval(updateCountdown, 1000);
 `;
-        return new Response(scriptContent, {
-            headers: { 'Content-Type': 'application/javascript' , 'Cache-Control': 'public, max-age=86400' },
-        });
-    }
+    return new Response(scriptContent, {
+        headers: { 
+            'Content-Type': 'application/javascript',
+            'Cache-Control': 'public, max-age=86400',
+            'ETag': `"${MONITOR_NAME}-js-v1"`,
+        },
+    });
+}
 
     if (request.url.endsWith('/style.css')) {
         const styleContent = `
@@ -375,10 +392,14 @@ a {
         text-align:right;
     }
 }`;
-        return new Response(styleContent, {
-            headers: { 'Content-Type': 'text/css' ,'Cache-Control': 'public, max-age=86400' },
-        });
-    }
+    return new Response(styleContent, {
+        headers: { 
+            'Content-Type': 'text/css',
+            'Cache-Control': 'public, max-age=86400',
+            'ETag': `"${MONITOR_NAME}-js-v1"`,
+        },
+    });
+}
 
     return new Response('Not Found', { status: 404 });
 }
@@ -460,15 +481,44 @@ async function getStatus(env) {
     const now = Date.now();
     if (statusCache.data && (now - statusCache.time < STATUS_CACHE_TTL)) {
         console.log("状态缓存命中");
-        return new Response(statusCache.data, { headers: { 'Content-Type': 'application/json' } });
+        
+        const data = JSON.parse(statusCache.data);
+        const updateTime = new Date(data.updateTime).getTime();
+        const timeUntilNextUpdate = Math.max(0, Math.min(60, Math.floor((updateTime + 30*60*1000 - now)/1000)));
+        
+        return new Response(statusCache.data, { 
+            headers: { 
+                'Content-Type': 'application/json',
+                'Cache-Control': `public, max-age=${timeUntilNextUpdate}`,
+                'X-Cache': 'HIT',
+                'X-Cache-Time': new Date(statusCache.time).toISOString()
+            } 
+        });
     }
+    
     console.log("状态缓存未命中");
     const raw = await env.STATUS.get('status');
     if (raw && raw !== '{"updateTime":"无数据","sites":[]}') {
         statusCache.data = raw;
         statusCache.time = now;
-        return new Response(raw, { headers: { 'Content-Type': 'application/json' } });
+        
+        const data = JSON.parse(raw);
+        const updateTime = new Date(data.updateTime).getTime();
+        const timeUntilNextUpdate = Math.max(0, Math.min(60, Math.floor((updateTime + 30*60*1000 - now)/1000)));
+        
+        return new Response(raw, { 
+            headers: { 
+                'Content-Type': 'application/json',
+                'Cache-Control': `public, max-age=${timeUntilNextUpdate}`,
+                'X-Cache': 'MISS'
+            } 
+        });
     } else {
-        return new Response('{"updateTime":"无数据","sites":[]}', { headers: { 'Content-Type': 'application/json' } });
+        return new Response('{"updateTime":"无数据","sites":[]}', { 
+            headers: { 
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-cache'
+            } 
+        });
     }
 }
