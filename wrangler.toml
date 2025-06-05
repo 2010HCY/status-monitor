@@ -16,3 +16,7 @@ crons = ["*/30 * * * *"]
 
 [observability.logs]
 enabled = true
+
+[assets]
+directory = "./index"
+binding = "ASSETS"

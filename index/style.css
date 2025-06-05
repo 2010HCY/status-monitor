@@ -1,0 +1,153 @@
+body {
+    font-family: sans-serif;
+    background-color: #f0f0f0;
+    margin: 0;
+    padding: 0;
+}
+.container {
+    max-width: 800px;
+    margin: 20px auto;
+    padding: 20px;
+    background-color: #fff;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+.header {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+.monitor-name {
+    font-size: 24px;
+    font-weight: bold;
+    margin-right: 10px;
+}
+a {
+    color: oklch(0.55 0.12 112);
+    text-decoration: none;
+    position: relative;
+}
+.countdown {
+    margin-right: auto;
+}
+.status-item {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+    padding: 10px;
+    border-radius: 5px;
+    border: 1px solid #ddd;
+    position: relative;
+}
+.status-item:hover {
+    background-color: #f9f9f9;
+}
+.status-item .status-indicator {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    margin-right: 10px;
+}
+.status-item .status-indicator.up {
+    background-color: green;
+}
+.status-item .status-indicator.down {
+    background-color: red;
+}
+.status-item .website-name {
+    flex-grow: 1;
+    font-weight: bold;
+    margin-right: 10px;
+}
+.status-bars {
+    display: flex;
+    align-items: center;
+    margin-left: auto;
+}
+.status-bar {
+    width: 6px;
+    height: 10px;
+    margin: 0 1px;
+    background-color: #ddd;
+}
+.status-bar.up {
+    background-color: green;
+}
+.status-bar.down {
+    background-color: red;
+}
+.loading,
+.error {
+    text-align: center;
+    font-weight: bold;
+    color: #555;
+}
+.status-link {
+    margin-right: 10px;
+    color: #007bff;
+    text-decoration: none;
+    white-space: nowrap;
+}
+.status-link:hover {
+    text-decoration: underline;
+}
+.percentage-display {
+    position: absolute;
+    top: 2px;
+    right: 5px;
+    font-size: 12px;
+    color: #555;
+}
+.progress-bar-container {
+    width: 100%;
+    height: 20px;
+    background-color: #f0f0f0;
+    border-radius: 5px;
+    overflow: hidden;
+    margin: 20px 0;
+}
+.progress-bar {
+    height: 100%;
+    width: 0;
+    background-color: #4caf50;
+    transition: width 0.2s ease;
+}
+@media (max-width: 600px) {
+    .container {
+        padding: 10px;
+    }
+    .header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .monitor-name{
+        margin-right:0;
+        margin-bottom:10px;
+    }
+    .buttons {
+        margin-top: 10px;
+        justify-content: center;
+    }
+    .countdown{
+        order:-1;
+    }
+    .status-item {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .status-bars {
+        margin-left: 0;
+        margin-top: 10px;
+        width: 100%;
+    }
+     .status-bar {
+         flex: 1;
+    }
+    .percentage-display {
+        position: static;
+        margin-top: 5px;
+        text-align:right;
+    }
+}
